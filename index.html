@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Motion Amplification Webcam Filter</title>
+  <style>
+    :root {
+      --bg-a: #0f1f1c;
+      --bg-b: #103843;
+      --panel: rgba(14, 20, 23, 0.72);
+      --panel-border: rgba(200, 234, 255, 0.22);
+      --ink: #eef7ff;
+      --muted: #b9cad8;
+      --accent: #ffc857;
+      --accent-2: #7ee8fa;
+      --danger: #ff6b6b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 500px at -10% -10%, rgba(255, 200, 87, 0.18), transparent 60%),
+        radial-gradient(900px 550px at 110% 0%, rgba(126, 232, 250, 0.2), transparent 58%),
+        linear-gradient(150deg, var(--bg-a), var(--bg-b));
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .page {
+      width: min(1080px, 100%);
+      animation: reveal 0.65s ease-out both;
+    }
+
+    .title {
+      margin: 0 0 6px;
+      font-size: clamp(1.45rem, 2.4vw, 2.3rem);
+      letter-spacing: 0.02em;
+      text-wrap: balance;
+    }
+
+    .subtitle {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.45;
+      max-width: 72ch;
+    }
+
+    .layout {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 320px 1fr;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 16px 48px rgba(4, 10, 17, 0.45);
+      overflow: hidden;
+    }
+
+    .controls {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .btn-row {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s ease, filter 0.2s ease;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      filter: brightness(1.05);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .start {
+      background: linear-gradient(120deg, var(--accent), #ffdd90);
+      color: #1a1302;
+    }
+
+    .stop {
+      background: linear-gradient(120deg, #ffa69e, var(--danger));
+      color: #2e0303;
+    }
+
+    .screen {
+      background: linear-gradient(120deg, #7ee8fa, #80b0ff);
+      color: #071428;
+    }
+
+    .file-btn {
+      background: linear-gradient(120deg, #a8edea, #98d8c8);
+      color: #061714;
+    }
+
+    .group-label {
+      margin: 0;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .playback-panel {
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(3, 9, 15, 0.35);
+      display: grid;
+      gap: 8px;
+    }
+
+    .playback-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .playback-btn {
+      padding: 6px 11px;
+      border-radius: 999px;
+      font-size: 0.84rem;
+      background: rgba(126, 232, 250, 0.2);
+      color: var(--ink);
+      border: 1px solid var(--panel-border);
+    }
+
+    .time-label {
+      font-size: 0.84rem;
+      color: var(--muted);
+      min-width: 92px;
+      text-align: right;
+    }
+
+    .playback-row input[type="range"] {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .control {
+      display: grid;
+      gap: 8px;
+    }
+
+    .control-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.96rem;
+    }
+
+    .value-chip {
+      font-size: 0.88rem;
+      color: #101f2f;
+      background: var(--accent-2);
+      border-radius: 999px;
+      padding: 3px 10px;
+      min-width: 58px;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .status {
+      margin: 0;
+      min-height: 1.35em;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.4;
+    }
+
+    .video-wrap {
+      position: relative;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .video-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 2px 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .video-toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .video-toolbar select {
+      border: 1px solid var(--panel-border);
+      background: rgba(3, 9, 15, 0.65);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 0.85rem;
+    }
+
+    .video-toolbar label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .frame {
+      width: 100%;
+      display: block;
+      border-radius: 11px;
+      border: 1px solid rgba(238, 247, 255, 0.2);
+      background: #020609;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+    }
+
+    .badge {
+      position: absolute;
+      top: 58px;
+      left: 24px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .footer {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.83rem;
+      line-height: 1.45;
+    }
+
+    .fade-up {
+      animation: fade-up 0.55s ease both;
+    }
+
+    .page.portrait-mode {
+      width: min(760px, 100%);
+    }
+
+    .page.portrait-mode .layout {
+      grid-template-columns: 1fr;
+    }
+
+    .page.portrait-mode .video-wrap {
+      order: -1;
+    }
+
+    @keyframes reveal {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .btn-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!--
+    Conversation Summary (March 20, 2026)
+
+    User Prompt History (condensed):
+    1) Create a single-page browser app with webcam video and a configurable "motion amplification" filter,
+       with user control over overlay opacity, no external libraries, Chrome-friendly.
+    2) Add controls to remove the base/background frame so motion highlights stand out.
+    3) Add a slider for base-frame opacity, while keeping a quick checkbox that forces full base removal.
+    4) Asked about capture options:
+       - Screen/window capture support: implemented via getDisplayMedia.
+       - Local video file playback: implemented via file input + object URL.
+       - YouTube URL processing: not supported due to browser cross-origin/canvas restrictions.
+    5) Add FPS counter and display-size resize control for filtered output.
+    6) Add mousewheel adjustment for sliders and portrait/half-screen-friendly video fitting controls.
+    7) Add file playback controls and audio output (pause/play, scrubbing, mute, volume, timeline).
+    8) Add dwell time for highlighted motion pixels so trails persist and fade over time.
+    9) Asked about local (repo-hosted) performance-improvement options (no CDN dependency).
+    10) Add base-frame reference controls: manual save and automatic reset interval.
+
+    Implemented Feature Set:
+    - Input sources:
+      - Webcam (getUserMedia)
+      - Screen/window capture (getDisplayMedia)
+      - Local video file playback
+    - Motion filter controls:
+      - Overlay opacity
+      - Motion boost
+      - Motion threshold
+      - Highlight dwell time (per-pixel persistence with time-based fade)
+      - Manual base-frame capture
+      - Automatic base-frame reset interval
+      - Base frame opacity
+      - Remove base frame toggle (forces base opacity to 0)
+    - Display controls:
+      - Display size slider
+      - Aspect preset selector (Auto, 16:9, 4:3, 1:1, 3:4, 9:16)
+      - Portrait fit mode toggle
+    - Playback/audio controls (file mode):
+      - Play/Pause
+      - Seek/scrub timeline + elapsed/total time label
+      - Mute/Unmute
+      - Volume slider
+    - Diagnostics/readouts:
+      - Processing FPS counter
+    - Usability:
+      - Mousewheel slider adjustment for all range controls
+      - Source-mode-aware enable/disable behavior for playback controls
+
+    Notes:
+    - This file intentionally uses plain HTML/CSS/JS with no external dependencies.
+    - Canvas processing is performed frame-by-frame in the main render loop.
+    - Discussed local-library performance options (summary):
+      - WebGL shader path (raw WebGL or local helper like regl): biggest likely performance gain.
+      - OpenCV.js (self-hosted WASM): useful primitives, heavier payload and complexity.
+      - gpu.js (self-hosted): easier GPU kernels in JS, variable browser/device behavior.
+      - Custom WASM + SIMD module (Rust/C++): high control, more engineering effort.
+      - No-library step also discussed: Worker + OffscreenCanvas pipeline.
+  -->
+  <main class="page">
+    <h1 class="title">Motion Amplification Webcam Filter</h1>
+    <p class="subtitle">
+      This demo compares each video frame against a saved base frame, then overlays an inverted reference image where motion is detected.
+      Use manual save or timed auto-reset to control what counts as the motion baseline.
+    </p>
+
+    <section class="layout">
+      <aside class="panel controls fade-up">
+        <p class="group-label">Video Source</p>
+        <div class="btn-row">
+          <button id="startBtn" class="start" type="button">Webcam</button>
+          <button id="screenBtn" class="screen" type="button">Screen / Window</button>
+        </div>
+        <div class="btn-row">
+          <button id="loadFileBtn" class="file-btn" type="button">Load Video File</button>
+          <button id="stopBtn" class="stop" type="button" disabled>&#9632; Stop</button>
+        </div>
+        <input id="fileInput" type="file" accept="video/*" hidden />
+
+        <p class="group-label">File Playback</p>
+        <div id="playbackPanel" class="playback-panel">
+          <div class="playback-row">
+            <button id="playPauseBtn" class="playback-btn" type="button" disabled>Play</button>
+            <input id="seekRange" type="range" min="0" max="1000" step="1" value="0" disabled />
+            <span id="timeLabel" class="time-label">00:00 / 00:00</span>
+          </div>
+          <div class="playback-row">
+            <button id="muteBtn" class="playback-btn" type="button" disabled>Mute</button>
+            <label for="volumeRange">Volume</label>
+            <input id="volumeRange" type="range" min="0" max="1" step="0.01" value="1" disabled />
+          </div>
+        </div>
+
+        <div class="control">
+          <div class="control-header">
+            <label for="opacityRange">Overlay Opacity</label>
+            <span id="opacityValue" class="value-chip">65%</span>
+          </div>
+          <input id="opacityRange" type="range" min="0" max="1" step="0.01" value="1.00" />
+        </div>
+
+        <div class="control">
+          <div class="control-header">
+            <label for="motionBoostRange">Motion Boost</label>
+            <span id="motionBoostValue" class="value-chip">1.8x</span>
+          </div>
+          <input id="motionBoostRange" type="range" min="0.5" max="4" step="0.1" value="4.0" />
+        </div>
+
+        <div class="control">
+          <div class="control-header">
+            <label for="motionThresholdRange">Motion Threshold</label>
+            <span id="motionThresholdValue" class="value-chip">10%</span>
+          </div>
+          <input id="motionThresholdRange" type="range" min="0" max="0.6" step="0.01" value="0.10" />
+        </div>
+
+        <div class="control">
+          <div class="control-header">
+            <label for="dwellTimeRange">Highlight Dwell</label>
+            <span id="dwellTimeValue" class="value-chip">0.00s</span>
+          </div>
+          <input id="dwellTimeRange" type="range" min="0" max="3" step="0.05" value="0" />
+        </div>
+
+        <div class="control">
+          <div class="control-header">
+            <label>Base Frame Reference</label>
+            <button id="saveBaseFrameBtn" class="playback-btn" type="button">Save Base Frame</button>
+          </div>
+        </div>
+
+        <div class="control">
+          <label>
+            <input id="autoBaseResetCheckbox" type="checkbox" checked />
+            Auto reset base frame
+          </label>
+        </div>
+
+        <div class="control">
+          <div class="control-header">
+            <label for="baseResetTimeRange">Base Frame Reset Time</label>
+            <span id="baseResetTimeValue" class="value-chip">1.0s</span>
+          </div>
+          <input id="baseResetTimeRange" type="range" min="0.1" max="10" step="0.1" value="1.0" />
+        </div>
+
+        <div class="control">
+          <label>
+            <input id="invertColorsCheckbox" type="checkbox" checked />
+            Invert highlight colors
+          </label>
+        </div>
+
+        <div class="control">
+          <label>
+            <input id="removeBaseCheckbox" type="checkbox" />
+            Remove base frame (show motion highlights only)
+          </label>
+        </div>
+
+        <div class="control">
+          <div class="control-header">
+            <label for="baseOpacityRange">Base Frame Opacity</label>
+            <span id="baseOpacityValue" class="value-chip">55%</span>
+          </div>
+          <input id="baseOpacityRange" type="range" min="0" max="1" step="0.01" value="0.50" />
+        </div>
+
+        <div class="control">
+          <div class="control-header">
+            <label for="displayScaleRange">Display Size</label>
+            <span id="displayScaleValue" class="value-chip">100%</span>
+          </div>
+          <input id="displayScaleRange" type="range" min="40" max="140" step="1" value="100" />
+        </div>
+
+        <p class="status">Processing FPS: <span id="fpsValue">0.0</span></p>
+
+        <p id="status" class="status">Waiting to start camera...</p>
+        <p class="hint">
+          Works best with stable lighting and a still camera. Chrome desktop/mobile should work without external libraries.
+        </p>
+      </aside>
+
+      <section class="panel video-wrap fade-up">
+        <div class="video-toolbar">
+          <div class="video-toolbar-group">
+            <label for="aspectPresetSelect">Display Aspect</label>
+            <select id="aspectPresetSelect">
+              <option value="auto" selected>Auto</option>
+              <option value="16/9">16:9</option>
+              <option value="4/3">4:3</option>
+              <option value="1/1">1:1</option>
+              <option value="3/4">3:4</option>
+              <option value="9/16">9:16</option>
+            </select>
+          </div>
+          <label>
+            <input id="portraitModeCheckbox" type="checkbox" />
+            Portrait fit mode
+          </label>
+        </div>
+        <span class="badge">Filtered Output</span>
+        <canvas id="outputCanvas" class="frame" aria-label="Filtered webcam stream"></canvas>
+      </section>
+    </section>
+
+    <p class="footer">
+      Filter recipe: current frame + inverted base frame blend, alpha weighted by per-pixel frame difference and optional dwell persistence.
+    </p>
+  </main>
+
+  <video id="sourceVideo" autoplay playsinline muted hidden></video>
+  <canvas id="workCanvas" hidden></canvas>
+
+  <script>
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const statusEl = document.getElementById("status");
+
+    const opacityRange = document.getElementById("opacityRange");
+    const opacityValue = document.getElementById("opacityValue");
+
+    const motionBoostRange = document.getElementById("motionBoostRange");
+    const motionBoostValue = document.getElementById("motionBoostValue");
+
+    const motionThresholdRange = document.getElementById("motionThresholdRange");
+    const motionThresholdValue = document.getElementById("motionThresholdValue");
+    const dwellTimeRange = document.getElementById("dwellTimeRange");
+    const dwellTimeValue = document.getElementById("dwellTimeValue");
+    const saveBaseFrameBtn = document.getElementById("saveBaseFrameBtn");
+    const autoBaseResetCheckbox = document.getElementById("autoBaseResetCheckbox");
+    const baseResetTimeRange = document.getElementById("baseResetTimeRange");
+    const baseResetTimeValue = document.getElementById("baseResetTimeValue");
+    const invertColorsCheckbox = document.getElementById("invertColorsCheckbox");
+    const removeBaseCheckbox = document.getElementById("removeBaseCheckbox");
+
+    const baseOpacityRange = document.getElementById("baseOpacityRange");
+    const baseOpacityValue = document.getElementById("baseOpacityValue");
+
+    const displayScaleRange = document.getElementById("displayScaleRange");
+    const displayScaleValue = document.getElementById("displayScaleValue");
+    const fpsValue = document.getElementById("fpsValue");
+    const aspectPresetSelect = document.getElementById("aspectPresetSelect");
+    const portraitModeCheckbox = document.getElementById("portraitModeCheckbox");
+    const pageEl = document.querySelector(".page");
+
+    const screenBtn = document.getElementById("screenBtn");
+    const loadFileBtn = document.getElementById("loadFileBtn");
+    const fileInput = document.getElementById("fileInput");
+    const playbackPanel = document.getElementById("playbackPanel");
+    const playPauseBtn = document.getElementById("playPauseBtn");
+    const seekRange = document.getElementById("seekRange");
+    const timeLabel = document.getElementById("timeLabel");
+    const muteBtn = document.getElementById("muteBtn");
+    const volumeRange = document.getElementById("volumeRange");
+
+    const video = document.getElementById("sourceVideo");
+    const outputCanvas = document.getElementById("outputCanvas");
+    const outputCtx = outputCanvas.getContext("2d", { willReadFrequently: true });
+
+    const workCanvas = document.getElementById("workCanvas");
+    const workCtx = workCanvas.getContext("2d", { willReadFrequently: true });
+
+    let stream = null;
+    let animationId = null;
+    let baseFramePixels = null;
+    let persistencePixels = null;
+    let isRunning = false;
+    let fileObjectUrl = null;
+    let fpsFrameCount = 0;
+    let fpsLastSample = performance.now();
+    let lastFrameTime = performance.now();
+    let lastBaseFrameCaptureTime = performance.now();
+    let currentSourceType = "none";
+    let isSeeking = false;
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.style.color = isError ? "#ffb3b3" : "var(--muted)";
+    }
+
+    function syncSliderLabels() {
+      opacityValue.textContent = `${Math.round(Number(opacityRange.value) * 100)}%`;
+      motionBoostValue.textContent = `${Number(motionBoostRange.value).toFixed(1)}x`;
+      motionThresholdValue.textContent = `${Math.round(Number(motionThresholdRange.value) * 100)}%`;
+      dwellTimeValue.textContent = `${Number(dwellTimeRange.value).toFixed(2)}s`;
+      baseResetTimeValue.textContent = `${Number(baseResetTimeRange.value).toFixed(1)}s`;
+      baseOpacityValue.textContent = `${Math.round(Number(baseOpacityRange.value) * 100)}%`;
+      displayScaleValue.textContent = `${Math.round(Number(displayScaleRange.value))}%`;
+    }
+
+    function updateBaseFrameUi() {
+      baseResetTimeRange.disabled = !autoBaseResetCheckbox.checked;
+      saveBaseFrameBtn.disabled = !isRunning;
+      saveBaseFrameBtn.style.opacity = isRunning ? "1" : "0.55";
+    }
+
+    function setBaseFrameFromPixels(pixelData, timestamp = performance.now()) {
+      baseFramePixels = new Uint8ClampedArray(pixelData);
+      persistencePixels = null;
+      lastBaseFrameCaptureTime = timestamp;
+    }
+
+    function captureCurrentBaseFrame(sourceLabel = "Base frame saved.") {
+      if (!isRunning || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+        setStatus("No active video frame available to save as base frame.", true);
+        return;
+      }
+
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+      if (workCanvas.width !== width || workCanvas.height !== height) {
+        workCanvas.width = width;
+        workCanvas.height = height;
+      }
+
+      workCtx.drawImage(video, 0, 0, width, height);
+      const currentFrame = workCtx.getImageData(0, 0, width, height);
+      setBaseFrameFromPixels(currentFrame.data);
+      setStatus(sourceLabel);
+    }
+
+    function applyDisplayScale() {
+      outputCanvas.style.width = `${displayScaleRange.value}%`;
+    }
+
+    function applyViewSettings() {
+      const preset = aspectPresetSelect.value;
+      if (preset === "auto") {
+        outputCanvas.style.aspectRatio = "";
+      } else {
+        outputCanvas.style.aspectRatio = preset;
+      }
+
+      pageEl.classList.toggle("portrait-mode", portraitModeCheckbox.checked);
+    }
+
+    function attachRangeWheelSupport() {
+      const ranges = document.querySelectorAll('input[type="range"]');
+      for (const range of ranges) {
+        range.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          const min = Number(range.min || 0);
+          const max = Number(range.max || 100);
+          const step = Number(range.step || 1);
+          const current = Number(range.value);
+          const direction = event.deltaY < 0 ? 1 : -1;
+          const next = Math.min(max, Math.max(min, current + (step * direction)));
+          range.value = String(next);
+          range.dispatchEvent(new Event("input", { bubbles: true }));
+        }, { passive: false });
+      }
+    }
+
+    function resetFpsCounter() {
+      fpsFrameCount = 0;
+      fpsLastSample = performance.now();
+      fpsValue.textContent = "0.0";
+    }
+
+    function formatTime(totalSeconds) {
+      if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
+        return "00:00";
+      }
+      const sec = Math.floor(totalSeconds % 60);
+      const min = Math.floor((totalSeconds / 60) % 60);
+      const hr = Math.floor(totalSeconds / 3600);
+      if (hr > 0) {
+        return `${String(hr).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+      }
+      return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+    }
+
+    function setPlaybackControlsEnabled(enabled) {
+      playPauseBtn.disabled = !enabled;
+      seekRange.disabled = !enabled;
+      muteBtn.disabled = !enabled;
+      volumeRange.disabled = !enabled;
+      playbackPanel.style.opacity = enabled ? "1" : "0.6";
+    }
+
+    function updateTimeLabel() {
+      const current = formatTime(video.currentTime || 0);
+      const total = formatTime(video.duration || 0);
+      timeLabel.textContent = `${current} / ${total}`;
+    }
+
+    function updatePlaybackUi() {
+      const fileMode = currentSourceType === "file";
+      setPlaybackControlsEnabled(fileMode);
+      playPauseBtn.textContent = video.paused ? "Play" : "Pause";
+      muteBtn.textContent = video.muted ? "Unmute" : "Mute";
+      volumeRange.value = String(video.volume);
+
+      if (fileMode && Number.isFinite(video.duration) && video.duration > 0) {
+        if (!isSeeking) {
+          const ratio = Math.min(1, Math.max(0, video.currentTime / video.duration));
+          seekRange.value = String(Math.round(ratio * 1000));
+        }
+      } else {
+        seekRange.value = "0";
+      }
+
+      updateTimeLabel();
+    }
+
+    function stopCamera() {
+      isRunning = false;
+      currentSourceType = "none";
+
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      if (stream) {
+        for (const track of stream.getTracks()) {
+          track.stop();
+        }
+        stream = null;
+      }
+
+      video.pause();
+      video.srcObject = null;
+      video.src = "";
+      video.muted = true;
+      video.volume = 1;
+
+      if (fileObjectUrl) {
+        URL.revokeObjectURL(fileObjectUrl);
+        fileObjectUrl = null;
+      }
+
+      baseFramePixels = null;
+      persistencePixels = null;
+      lastFrameTime = performance.now();
+      lastBaseFrameCaptureTime = performance.now();
+      resetFpsCounter();
+      startBtn.disabled = false;
+      screenBtn.disabled = false;
+      loadFileBtn.disabled = false;
+      stopBtn.disabled = true;
+      setStatus("Stopped.");
+      outputCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+      updatePlaybackUi();
+      updateBaseFrameUi();
+    }
+
+    function processFrame() {
+      if (!isRunning) {
+        animationId = null;
+        return;
+      }
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        animationId = requestAnimationFrame(processFrame);
+        return;
+      }
+
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+      const now = performance.now();
+      const deltaSec = Math.min(0.2, Math.max(0, (now - lastFrameTime) / 1000));
+      lastFrameTime = now;
+
+      if (!width || !height) {
+        animationId = requestAnimationFrame(processFrame);
+        return;
+      }
+
+      if (workCanvas.width !== width || workCanvas.height !== height) {
+        workCanvas.width = width;
+        workCanvas.height = height;
+        outputCanvas.width = width;
+        outputCanvas.height = height;
+        if (aspectPresetSelect.value === "auto") {
+          outputCanvas.style.aspectRatio = `${width} / ${height}`;
+        }
+        baseFramePixels = null;
+      }
+
+      if (!persistencePixels || persistencePixels.length !== width * height) {
+        persistencePixels = new Float32Array(width * height);
+      }
+
+      workCtx.drawImage(video, 0, 0, width, height);
+      const currentFrame = workCtx.getImageData(0, 0, width, height);
+      const curr = currentFrame.data;
+
+      if (!baseFramePixels || baseFramePixels.length !== curr.length) {
+        setBaseFrameFromPixels(curr, now);
+        outputCtx.putImageData(currentFrame, 0, 0);
+        animationId = requestAnimationFrame(processFrame);
+        return;
+      }
+
+      const overlayOpacity = Number(opacityRange.value);
+      const motionBoost = Number(motionBoostRange.value);
+      const motionThreshold = Number(motionThresholdRange.value);
+      const dwellTime = Number(dwellTimeRange.value);
+      const invertColors = invertColorsCheckbox.checked;
+      const removeBase = removeBaseCheckbox.checked;
+      const effectiveBaseOpacity = removeBase ? 0 : Number(baseOpacityRange.value);
+      const dwellDecay = dwellTime <= 0 ? 1 : Math.min(1, deltaSec / dwellTime);
+      const outFrame = outputCtx.createImageData(width, height);
+      const out = outFrame.data;
+
+      for (let i = 0; i < curr.length; i += 4) {
+        const pixelIndex = i >> 2;
+        const cr = curr[i];
+        const cg = curr[i + 1];
+        const cb = curr[i + 2];
+
+        const pr = baseFramePixels[i];
+        const pg = baseFramePixels[i + 1];
+        const pb = baseFramePixels[i + 2];
+
+        const diff = (Math.abs(cr - pr) + Math.abs(cg - pg) + Math.abs(cb - pb)) / 3;
+        const diffNorm = diff / 255;
+        const boostedMotion = Math.max(0, diffNorm - motionThreshold) * motionBoost;
+        const motionAlpha = Math.min(1, boostedMotion) * overlayOpacity;
+
+        const decayedPersistence = persistencePixels[pixelIndex] * (1 - dwellDecay);
+        const highlightAlpha = Math.max(decayedPersistence, motionAlpha);
+        persistencePixels[pixelIndex] = highlightAlpha;
+
+        const highlightR = invertColors ? 255 - pr : pr;
+        const highlightG = invertColors ? 255 - pg : pg;
+        const highlightB = invertColors ? 255 - pb : pb;
+
+        out[i] = cr * effectiveBaseOpacity * (1 - highlightAlpha) + highlightR * highlightAlpha;
+        out[i + 1] = cg * effectiveBaseOpacity * (1 - highlightAlpha) + highlightG * highlightAlpha;
+        out[i + 2] = cb * effectiveBaseOpacity * (1 - highlightAlpha) + highlightB * highlightAlpha;
+        out[i + 3] = 255;
+      }
+
+      outputCtx.putImageData(outFrame, 0, 0);
+
+      if (autoBaseResetCheckbox.checked && (now - lastBaseFrameCaptureTime) >= Number(baseResetTimeRange.value) * 1000) {
+        setBaseFrameFromPixels(curr, now);
+      }
+
+      fpsFrameCount += 1;
+      const elapsed = now - fpsLastSample;
+      if (elapsed >= 500) {
+        const fps = (fpsFrameCount * 1000) / elapsed;
+        fpsValue.textContent = fps.toFixed(1);
+        fpsFrameCount = 0;
+        fpsLastSample = now;
+      }
+
+      animationId = requestAnimationFrame(processFrame);
+    }
+
+    async function startScreenShare() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        setStatus("Screen capture is unavailable in this browser.", true);
+        return;
+      }
+      try {
+        stopCamera();
+        setStatus("Requesting screen/window access...");
+
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+
+        video.srcObject = stream;
+        video.muted = true;
+        await video.play();
+
+        // If the user stops sharing via the browser's own UI, clean up
+        stream.getVideoTracks()[0].addEventListener("ended", stopCamera);
+
+        isRunning = true;
+        currentSourceType = "live";
+        startBtn.disabled = true;
+        screenBtn.disabled = true;
+        loadFileBtn.disabled = true;
+        stopBtn.disabled = false;
+        updateBaseFrameUi();
+        setStatus("Screen capture live. Motion amplification active.");
+
+        animationId = requestAnimationFrame(processFrame);
+      } catch (error) {
+        stream = null;
+        const message = error && error.name === "NotAllowedError"
+          ? "Screen share permission denied or dismissed."
+          : `Could not start screen capture: ${error && error.message ? error.message : "unknown error"}`;
+        setStatus(message, true);
+      }
+    }
+
+    function handleFileInput() {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      stopCamera();
+
+      fileObjectUrl = URL.createObjectURL(file);
+      video.srcObject = null;
+      video.src = fileObjectUrl;
+      video.muted = false;
+      video.volume = Number(volumeRange.value);
+      video.load();
+
+      currentSourceType = "file";
+      updatePlaybackUi();
+      updateBaseFrameUi();
+
+      video.addEventListener("canplay", () => {
+        video.play();
+        isRunning = true;
+        startBtn.disabled = true;
+        screenBtn.disabled = true;
+        loadFileBtn.disabled = true;
+        stopBtn.disabled = false;
+        setStatus(`Playing: ${file.name}`);
+        updatePlaybackUi();
+        updateBaseFrameUi();
+        animationId = requestAnimationFrame(processFrame);
+      }, { once: true });
+
+      video.addEventListener("ended", () => {
+        stopCamera();
+        setStatus(`File ended: ${file.name}`);
+      }, { once: true });
+
+      video.addEventListener("error", () => {
+        stopCamera();
+        setStatus("Error loading video file. Is it a supported format?", true);
+      }, { once: true });
+
+      setStatus("Loading video file...");
+    }
+
+    async function startCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus("getUserMedia is unavailable in this browser.", true);
+        return;
+      }
+
+      try {
+        stopCamera();
+        setStatus("Requesting camera access...");
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        video.muted = true;
+        await video.play();
+
+        isRunning = true;
+        currentSourceType = "live";
+        startBtn.disabled = true;
+        screenBtn.disabled = true;
+        loadFileBtn.disabled = true;
+        stopBtn.disabled = false;
+        updateBaseFrameUi();
+        setStatus("Webcam live. Motion amplification active.");
+
+        animationId = requestAnimationFrame(processFrame);
+      } catch (error) {
+        stream = null;
+        const message = error && error.name === "NotAllowedError"
+          ? "Camera permission denied. Allow access and try again."
+          : `Could not start camera: ${error && error.message ? error.message : "unknown error"}`;
+        setStatus(message, true);
+      }
+    }
+
+    startBtn.addEventListener("click", startCamera);
+    screenBtn.addEventListener("click", startScreenShare);
+    loadFileBtn.addEventListener("click", () => { fileInput.value = ""; fileInput.click(); });
+    fileInput.addEventListener("change", handleFileInput);
+    stopBtn.addEventListener("click", stopCamera);
+    saveBaseFrameBtn.addEventListener("click", () => captureCurrentBaseFrame("Base frame saved manually."));
+    autoBaseResetCheckbox.addEventListener("change", () => {
+      updateBaseFrameUi();
+      if (autoBaseResetCheckbox.checked && isRunning) {
+        captureCurrentBaseFrame("Auto base reset enabled. Base frame refreshed.");
+      }
+    });
+
+    playPauseBtn.addEventListener("click", async () => {
+      if (currentSourceType !== "file") return;
+      if (video.paused) {
+        try {
+          await video.play();
+        } catch (_error) {
+          setStatus("Could not start playback. Click video controls again.", true);
+        }
+      } else {
+        video.pause();
+      }
+      updatePlaybackUi();
+    });
+
+    seekRange.addEventListener("input", () => {
+      if (currentSourceType !== "file" || !Number.isFinite(video.duration) || video.duration <= 0) return;
+      isSeeking = true;
+      const ratio = Number(seekRange.value) / 1000;
+      video.currentTime = ratio * video.duration;
+      updatePlaybackUi();
+      isSeeking = false;
+    });
+
+    muteBtn.addEventListener("click", () => {
+      if (currentSourceType !== "file") return;
+      video.muted = !video.muted;
+      updatePlaybackUi();
+    });
+
+    volumeRange.addEventListener("input", () => {
+      if (currentSourceType !== "file") return;
+      video.volume = Number(volumeRange.value);
+      if (video.volume > 0 && video.muted) {
+        video.muted = false;
+      }
+      updatePlaybackUi();
+    });
+
+    video.addEventListener("timeupdate", updatePlaybackUi);
+    video.addEventListener("play", updatePlaybackUi);
+    video.addEventListener("pause", updatePlaybackUi);
+    video.addEventListener("loadedmetadata", updatePlaybackUi);
+    video.addEventListener("volumechange", updatePlaybackUi);
+
+    opacityRange.addEventListener("input", syncSliderLabels);
+    motionBoostRange.addEventListener("input", syncSliderLabels);
+    motionThresholdRange.addEventListener("input", syncSliderLabels);
+    dwellTimeRange.addEventListener("input", syncSliderLabels);
+    baseResetTimeRange.addEventListener("input", syncSliderLabels);
+    baseOpacityRange.addEventListener("input", syncSliderLabels);
+    displayScaleRange.addEventListener("input", () => {
+      syncSliderLabels();
+      applyDisplayScale();
+    });
+    aspectPresetSelect.addEventListener("change", applyViewSettings);
+    portraitModeCheckbox.addEventListener("change", applyViewSettings);
+
+    window.addEventListener("beforeunload", stopCamera);
+
+    attachRangeWheelSupport();
+    syncSliderLabels();
+    applyDisplayScale();
+    applyViewSettings();
+    updatePlaybackUi();
+    updateBaseFrameUi();
+  </script>
+</body>
+</html>
