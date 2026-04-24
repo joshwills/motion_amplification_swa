@@ -146,6 +146,24 @@
       flex-wrap: wrap;
     }
 
+    .camera-row {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+    }
+
+    .camera-row select {
+      min-width: 0;
+      width: 100%;
+      border: 1px solid var(--panel-border);
+      background: rgba(3, 9, 15, 0.65);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 11px;
+      font-size: 0.85rem;
+    }
+
     .playback-btn {
       padding: 6px 11px;
       border-radius: 999px;
@@ -401,6 +419,16 @@
           <button id="startBtn" class="start" type="button">Webcam</button>
           <button id="screenBtn" class="screen" type="button">Screen / Window</button>
         </div>
+        <div class="control">
+          <div class="control-header">
+            <label for="cameraSelect">Camera</label>
+            <button id="refreshCamerasBtn" class="playback-btn" type="button">Refresh</button>
+          </div>
+          <div class="camera-row">
+            <select id="cameraSelect" aria-label="Camera source"></select>
+            <button id="nextCameraBtn" class="playback-btn" type="button">Next Camera</button>
+          </div>
+        </div>
         <div class="btn-row">
           <button id="loadFileBtn" class="file-btn" type="button">Load Video File</button>
           <button id="stopBtn" class="stop" type="button" disabled>&#9632; Stop</button>
@@ -577,6 +605,9 @@
     const pageEl = document.querySelector(".page");
 
     const screenBtn = document.getElementById("screenBtn");
+    const cameraSelect = document.getElementById("cameraSelect");
+    const refreshCamerasBtn = document.getElementById("refreshCamerasBtn");
+    const nextCameraBtn = document.getElementById("nextCameraBtn");
     const loadFileBtn = document.getElementById("loadFileBtn");
     const fileInput = document.getElementById("fileInput");
     const playbackPanel = document.getElementById("playbackPanel");
@@ -605,10 +636,99 @@
     let lastBaseFrameCaptureTime = performance.now();
     let currentSourceType = "none";
     let isSeeking = false;
+    let availableCameras = [];
+    let preferredCameraId = "";
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message;
       statusEl.style.color = isError ? "#ffb3b3" : "var(--muted)";
+    }
+
+    function updateCameraControlsState() {
+      const hasCameras = availableCameras.length > 0;
+      cameraSelect.disabled = !hasCameras;
+      nextCameraBtn.disabled = availableCameras.length < 2;
+    }
+
+    function getDefaultCameraId(cameras) {
+      const rearCamera = cameras.find((camera) => {
+        const label = (camera.label || "").toLowerCase();
+        return label.includes("back")
+          || label.includes("rear")
+          || label.includes("environment")
+          || label.includes("world");
+      });
+      return rearCamera ? rearCamera.deviceId : cameras[0].deviceId;
+    }
+
+    function populateCameraSelect() {
+      const previousSelection = preferredCameraId || cameraSelect.value;
+      cameraSelect.innerHTML = "";
+
+      if (availableCameras.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No camera found";
+        cameraSelect.appendChild(opt);
+        preferredCameraId = "";
+        updateCameraControlsState();
+        return;
+      }
+
+      for (let i = 0; i < availableCameras.length; i += 1) {
+        const camera = availableCameras[i];
+        const opt = document.createElement("option");
+        opt.value = camera.deviceId;
+        opt.textContent = camera.label || `Camera ${i + 1}`;
+        cameraSelect.appendChild(opt);
+      }
+
+      const stillExists = availableCameras.some((camera) => camera.deviceId === previousSelection);
+      preferredCameraId = stillExists
+        ? previousSelection
+        : getDefaultCameraId(availableCameras);
+      cameraSelect.value = preferredCameraId;
+      updateCameraControlsState();
+    }
+
+    async function refreshCameras() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        availableCameras = [];
+        populateCameraSelect();
+        return;
+      }
+
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        availableCameras = devices.filter((device) => device.kind === "videoinput");
+        populateCameraSelect();
+      } catch (_error) {
+        availableCameras = [];
+        populateCameraSelect();
+      }
+    }
+
+    function syncPreferredCameraFromActiveTrack() {
+      if (!stream) return;
+      const [track] = stream.getVideoTracks();
+      if (!track) return;
+      const settings = track.getSettings();
+      if (!settings.deviceId) return;
+      preferredCameraId = settings.deviceId;
+      if (cameraSelect.querySelector(`option[value="${preferredCameraId}"]`)) {
+        cameraSelect.value = preferredCameraId;
+      }
+    }
+
+    async function selectNextCamera() {
+      if (availableCameras.length < 2) return;
+      const currentIndex = availableCameras.findIndex((camera) => camera.deviceId === cameraSelect.value);
+      const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % availableCameras.length : 0;
+      preferredCameraId = availableCameras[nextIndex].deviceId;
+      cameraSelect.value = preferredCameraId;
+      if (isRunning && currentSourceType === "live") {
+        await startCamera();
+      }
     }
 
     function syncSliderLabels() {
@@ -973,18 +1093,26 @@
         stopCamera();
         setStatus("Requesting camera access...");
 
+        const videoConstraints = {
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        };
+        if (preferredCameraId) {
+          videoConstraints.deviceId = { exact: preferredCameraId };
+        } else {
+          videoConstraints.facingMode = { ideal: "environment" };
+        }
+
         stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "user",
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
+          video: videoConstraints,
           audio: false
         });
 
         video.srcObject = stream;
         video.muted = true;
         await video.play();
+        syncPreferredCameraFromActiveTrack();
+        await refreshCameras();
 
         isRunning = true;
         currentSourceType = "live";
@@ -1007,6 +1135,14 @@
 
     startBtn.addEventListener("click", startCamera);
     screenBtn.addEventListener("click", startScreenShare);
+    refreshCamerasBtn.addEventListener("click", refreshCameras);
+    nextCameraBtn.addEventListener("click", selectNextCamera);
+    cameraSelect.addEventListener("change", async () => {
+      preferredCameraId = cameraSelect.value;
+      if (isRunning && currentSourceType === "live") {
+        await startCamera();
+      }
+    });
     loadFileBtn.addEventListener("click", () => { fileInput.value = ""; fileInput.click(); });
     fileInput.addEventListener("change", handleFileInput);
     stopBtn.addEventListener("click", stopCamera);
@@ -1076,8 +1212,12 @@
     portraitModeCheckbox.addEventListener("change", applyViewSettings);
 
     window.addEventListener("beforeunload", stopCamera);
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      navigator.mediaDevices.addEventListener("devicechange", refreshCameras);
+    }
 
     attachRangeWheelSupport();
+    refreshCameras();
     syncSliderLabels();
     applyDisplayScale();
     applyViewSettings();
